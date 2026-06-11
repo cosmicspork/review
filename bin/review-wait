@@ -1,0 +1,57 @@
+#!/bin/sh
+# review-wait — block until a review reaches a terminal status, then print the
+# full review JSON to stdout (and the final status to stderr). Dependency: curl.
+#
+# usage: review-wait <review-id> [--interval=3] [--timeout=0] [--host=http://localhost:4000]
+#   --interval  seconds to sleep between long-poll requests (default 3)
+#   --timeout   give up after N seconds while still pending; 0 = wait forever (default 0)
+#   --host      review server base URL (default http://localhost:4000)
+set -eu
+
+id=""
+interval=3
+timeout=0
+host="http://localhost:4000"
+
+for arg in "$@"; do
+  case "$arg" in
+    --interval=*) interval="${arg#*=}" ;;
+    --timeout=*) timeout="${arg#*=}" ;;
+    --host=*) host="${arg#*=}" ;;
+    -*) echo "review-wait: unknown option: $arg" >&2; exit 2 ;;
+    *) id="$arg" ;;
+  esac
+done
+
+if [ -z "$id" ]; then
+  echo "usage: review-wait <review-id> [--interval=3] [--timeout=0] [--host=http://localhost:4000]" >&2
+  exit 2
+fi
+
+start="$(date +%s)"
+while :; do
+  st="$(curl -fsS "$host/api/reviews/$id/status?wait=45")" || {
+    echo "review-wait: request to $host failed" >&2
+    exit 1
+  }
+  case "$st" in
+    pending) ;;
+    approved|changes_requested|rejected)
+      echo "$st" >&2
+      curl -fsS "$host/api/reviews/$id"
+      exit 0
+      ;;
+    *)
+      echo "review-wait: unexpected status: $st" >&2
+      exit 1
+      ;;
+  esac
+  if [ "$timeout" -gt 0 ]; then
+    now="$(date +%s)"
+    if [ "$((now - start))" -ge "$timeout" ]; then
+      echo "review-wait: timed out after ${timeout}s (still pending)" >&2
+      exit 3
+    fi
+  fi
+  sleep "$interval"
+done

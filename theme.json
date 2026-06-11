@@ -1,0 +1,56 @@
+{
+  "themes": [
+    {
+      "id": "warm-editorial",
+      "name": "Warm Editorial",
+      "fonts": {
+        "display": "\"Fraunces\", Georgia, serif",
+        "body": "\"Hanken Grotesk\", system-ui, sans-serif",
+        "mono": "\"JetBrains Mono\", ui-monospace, monospace",
+        "stylesheet": "https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,900&family=Hanken+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap"
+      },
+      "dark": {
+        "bg": "#14110d", "bg2": "#1a1611", "surface": "#1e1a14", "surface2": "#252017", "surface3": "#2d2719",
+        "ink": "#ece3d4", "inkSoft": "#c3b9a7", "muted": "#8f8473", "faint": "#5f574a",
+        "accent": "#f0a734", "accentFill": "#f0a734", "accentInk": "#1a1206",
+        "pending": "#f0a734", "approved": "#7fbf6a", "changes": "#5cb4c6", "rejected": "#e2654c",
+        "shadow": "0 18px 40px -22px rgba(0,0,0,.8)", "codeBg": "#100d09",
+        "syntax": { "keyword": "#d6a6dd", "string": "#9ecb8a", "comment": "#5f574a", "number": "#e0a35c", "title": "#7fc3d6", "tag": "#d99089" }
+      },
+      "light": {
+        "bg": "#f5efe3", "bg2": "#efe7d6", "surface": "#fffdf7", "surface2": "#f4ecdd", "surface3": "#e9dfcc",
+        "ink": "#2a2316", "inkSoft": "#564a37", "muted": "#857a66", "faint": "#a89b84",
+        "accent": "#a8620a", "accentFill": "#e0930f", "accentInk": "#2a1a00",
+        "pending": "#d98a14", "approved": "#5b9e4a", "changes": "#2f93a8", "rejected": "#c14a35",
+        "shadow": "0 16px 36px -22px rgba(80,60,20,.4)", "codeBg": "#ece3d2",
+        "syntax": { "keyword": "#8a3fb0", "string": "#3f7a32", "comment": "#9a8d76", "number": "#9a5b00", "title": "#1f6f86", "tag": "#a3503f" }
+      }
+    },
+    {
+      "id": "cobalt",
+      "name": "Cobalt",
+      "fonts": {
+        "display": "\"Spectral\", Georgia, serif",
+        "body": "\"IBM Plex Sans\", system-ui, sans-serif",
+        "mono": "\"IBM Plex Mono\", ui-monospace, monospace",
+        "stylesheet": "https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;700&display=swap"
+      },
+      "dark": {
+        "bg": "#0d1220", "bg2": "#121829", "surface": "#161d30", "surface2": "#1d2740", "surface3": "#26324f",
+        "ink": "#e6ecf7", "inkSoft": "#aab6cc", "muted": "#7787a3", "faint": "#4f5d78",
+        "accent": "#5aa0f0", "accentFill": "#5aa0f0", "accentInk": "#08111f",
+        "pending": "#e0a64a", "approved": "#56c596", "changes": "#c79bf0", "rejected": "#f0746a",
+        "shadow": "0 18px 40px -22px rgba(0,0,0,.85)", "codeBg": "#0a0e18",
+        "syntax": { "keyword": "#c79bf0", "string": "#7fcf9e", "comment": "#5f6d88", "number": "#e0a64a", "title": "#5aa0f0", "tag": "#f0908a" }
+      },
+      "light": {
+        "bg": "#eef1f7", "bg2": "#e3e8f2", "surface": "#fbfcff", "surface2": "#e9eef8", "surface3": "#dde4f1",
+        "ink": "#16203a", "inkSoft": "#3f4c66", "muted": "#6b7894", "faint": "#9aa6bf",
+        "accent": "#2563b8", "accentFill": "#3b7fd6", "accentInk": "#04122a",
+        "pending": "#c07a12", "approved": "#3a8f63", "changes": "#7a4fb0", "rejected": "#c1463a",
+        "shadow": "0 16px 36px -22px rgba(30,50,90,.4)", "codeBg": "#e6ebf5",
+        "syntax": { "keyword": "#7a3fb0", "string": "#2f7a4a", "comment": "#8893ad", "number": "#9a5b00", "title": "#2563b8", "tag": "#b0413a" }
+      }
+    }
+  ]
+}
