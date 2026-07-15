@@ -7,8 +7,9 @@ export async function listReviews(): Promise<ReviewSummary[]> {
   return (await res.json()) as ReviewSummary[];
 }
 
-export async function getReview(id: string): Promise<FullReview> {
+export async function getReview(id: string): Promise<FullReview | null> {
   const res = await fetch(`/api/reviews/${id}`);
+  if (!res.ok) return null;
   return (await res.json()) as FullReview;
 }
 

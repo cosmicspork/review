@@ -130,3 +130,11 @@ test('missing review returns 404', async () => {
   const h = makeHandler();
   expect((await get(h, '/api/reviews/nope')).status).toBe(404);
 });
+
+test('a /reviews/:id deep link serves the SPA shell', async () => {
+  const h = makeHandler();
+  const res = await get(h, '/reviews/094d2610-04d4-4abe-b67d-152fa726c2d5');
+  expect(res.status).toBe(200);
+  expect(res.headers.get('Content-Type')).toContain('text/html');
+  expect(await res.text()).toBe('<html></html>');
+});

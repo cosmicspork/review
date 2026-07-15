@@ -112,7 +112,9 @@ export function createHandler(deps: HandlerDeps): Handler {
     const method = req.method;
 
     try {
-      if (method === 'GET' && path === '/') {
+      // The SPA owns `/` and every `/reviews/:id` deep link; all serve the same
+      // shell, which reads the path on load to select the review.
+      if (method === 'GET' && (path === '/' || path === '/reviews' || path.startsWith('/reviews/'))) {
         return new Response(indexHtml, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
       }
 
