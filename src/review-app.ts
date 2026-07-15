@@ -63,14 +63,51 @@ export class ReviewApp extends LitElement {
     }
     this.applyMode();
     this.theme.mql.addEventListener('change', this.onMql);
-    void this.fetchList();
+    window.addEventListener('popstate', this.onPopState);
+    this.activeId = ReviewApp.idFromPath();
+    void this.boot();
     this.connectSse();
   }
 
   disconnectedCallback(): void {
     super.disconnectedCallback();
     this.theme.mql.removeEventListener('change', this.onMql);
+    window.removeEventListener('popstate', this.onPopState);
     this.es?.close();
+  }
+
+  private static idFromPath(): string | null {
+    const m = location.pathname.match(/^\/reviews\/([^/]+)\/?$/);
+    return m ? decodeURIComponent(m[1]) : null;
+  }
+
+  // Keep the address bar in step with the active review so it can be linked and reloaded.
+  private syncUrl(id: string | null, replace = false): void {
+    const path = id ? `/reviews/${id}` : '/';
+    if (location.pathname === path) return;
+    if (replace) history.replaceState(null, '', path);
+    else history.pushState(null, '', path);
+  }
+
+  private onPopState = (): void => {
+    const id = ReviewApp.idFromPath();
+    if (id === this.activeId) return;
+    this.activeId = id;
+    void this.fetchActive();
+  };
+
+  private async boot(): Promise<void> {
+    const linked = this.activeId; // from the initial `/reviews/:id`, if any
+    await this.fetchList();
+    if (linked) {
+      await this.fetchActive();
+      if (!this.active) {
+        // Deep-linked id no longer exists — fall back to the first review.
+        this.activeId = this.reviews[0]?.id ?? null;
+        this.syncUrl(this.activeId, true);
+        if (this.activeId) await this.fetchActive();
+      }
+    }
   }
 
   private onMql = (): void => {
@@ -115,6 +152,7 @@ export class ReviewApp extends LitElement {
       if (ev.kind === 'remove') {
         this.activeId = null;
         this.active = null;
+        this.syncUrl(null, true);
       } else {
         void this.fetchActive();
       }
@@ -125,6 +163,7 @@ export class ReviewApp extends LitElement {
     this.reviews = await api.listReviews();
     if (!this.activeId && this.reviews.length) {
       this.activeId = this.reviews[0].id;
+      this.syncUrl(this.activeId, true);
       void this.fetchActive();
     }
   }
@@ -136,6 +175,7 @@ export class ReviewApp extends LitElement {
   private select(id: string): void {
     if (id === this.activeId) return;
     this.activeId = id;
+    this.syncUrl(id);
     void this.fetchActive();
   }
 

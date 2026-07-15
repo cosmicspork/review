@@ -31,6 +31,8 @@ curl -s localhost:4000/api/reviews -H 'content-type: application/json' -d '{
 
 The card appears in the queue. Approve it in the UI, then have the agent read it back.
 
+The `id` from the response is also a **deep link**: `http://localhost:4000/reviews/<id>` opens the app with that review already selected, so an agent can point a human straight at the item it just submitted. The URL updates as you click through the queue, and reloading or sharing it reopens the same review (a stale id falls back to the first one).
+
 ### Configuration (environment)
 
 | Variable | Default | Purpose |
