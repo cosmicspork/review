@@ -20,6 +20,29 @@ const patch = (h: Handler, p: string, b: unknown) =>
   h(new Request('http://x' + p, { method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify(b) }));
 const get = (h: Handler, p: string) => h(new Request('http://x' + p));
 
+test('GET /api/health returns ok JSON with review counts', async () => {
+  const h = makeHandler();
+  const res = await get(h, '/api/health');
+  expect(res.status).toBe(200);
+  const body = await res.json();
+  expect(body.ok).toBe(true);
+  expect(body.service).toBe('review');
+  expect(typeof body.version).toBe('string');
+  expect(body.reviews).toEqual({ total: 0, pending: 0 });
+
+  await post(h, '/api/reviews', { title: 't', kind: 'code', parts: [{ type: 'markdown', content: 'x' }] });
+  const after = await (await get(h, '/api/health')).json();
+  expect(after.reviews).toEqual({ total: 1, pending: 1 });
+});
+
+test('GET /health returns an HTML page for humans', async () => {
+  const h = makeHandler();
+  const res = await get(h, '/health');
+  expect(res.status).toBe(200);
+  expect(res.headers.get('content-type')).toContain('text/html');
+  expect(await res.text()).toContain('review is healthy');
+});
+
 test('POST with an adf part fills content via convert() and stores raw', async () => {
   const h = makeHandler();
   const created = await (

@@ -1,4 +1,5 @@
 import { convert } from 'adf-to-md';
+import pkg from './package.json' with { type: 'json' };
 import {
   captureDiff,
   resolveRepo,
@@ -91,8 +92,56 @@ async function buildPartRows(
   return rows;
 }
 
+interface HealthReport {
+  ok: boolean;
+  service: string;
+  version: string;
+  uptime_s: number;
+  reviews?: { total: number; pending: number };
+  error?: string;
+}
+
+function readHealth(db: ReviewDb, startedAt: number): HealthReport {
+  const base = { service: 'review', version: pkg.version, uptime_s: Math.round((Date.now() - startedAt) / 1000) };
+  try {
+    const reviews = db.listReviews();
+    const pending = reviews.filter((r) => r.status === 'pending').length;
+    return { ok: true, ...base, reviews: { total: reviews.length, pending } };
+  } catch (e) {
+    return { ok: false, ...base, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+function healthPage(h: HealthReport): string {
+  const rows: [string, string][] = [
+    ['status', h.ok ? 'ok' : 'error'],
+    ['version', h.version],
+    ['uptime', `${h.uptime_s}s`],
+  ];
+  if (h.reviews) rows.push(['reviews', String(h.reviews.total)], ['pending', String(h.reviews.pending)]);
+  if (h.error) rows.push(['error', h.error]);
+  const cells = rows
+    .map(([k, v]) => `<div class="k">${k}</div><div class="v">${escapeHtml(v)}</div>`)
+    .join('');
+  return `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>review · health</title><style>
+  :root { color-scheme: light dark; font: 15px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  body { margin: 0; display: grid; place-items: center; min-height: 100vh; background: Canvas; color: CanvasText; }
+  main { padding: 2rem 2.5rem; }
+  h1 { font-size: 1.1rem; margin: 0 0 1rem; display: flex; align-items: center; gap: .5rem; }
+  .dot { width: .7rem; height: .7rem; border-radius: 50%; background: ${h.ok ? '#22c55e' : '#ef4444'}; }
+  .grid { display: grid; grid-template-columns: auto auto; gap: .3rem 1.5rem; }
+  .k { opacity: .6; } .v { text-align: right; }
+</style><main><h1><span class="dot"></span>review is ${h.ok ? 'healthy' : 'unhealthy'}</h1><div class="grid">${cells}</div></main>`;
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+}
+
 export function createHandler(deps: HandlerDeps): Handler {
   const { db, repoRoot, indexHtml, bundle, diff2htmlCssPath } = deps;
+  const startedAt = Date.now();
   const sseClients = new Set<(e: SseEvent) => void>();
   const statusWaiters = new Map<string, Set<(s: string) => void>>();
 
@@ -132,6 +181,20 @@ export function createHandler(deps: HandlerDeps): Handler {
 
       if (method === 'GET' && path === '/vendor/diff2html.css') {
         return new Response(Bun.file(diff2htmlCssPath), { headers: { 'Content-Type': 'text/css; charset=utf-8' } });
+      }
+
+      // Liveness/readiness: `/api/health` for agents (JSON), `/health` for humans (HTML).
+      // Both exercise the DB, so a queryable SQLite is what "ok" actually attests to.
+      if (method === 'GET' && (path === '/api/health' || path === '/health')) {
+        const report = readHealth(db, startedAt);
+        const status = report.ok ? 200 : 503;
+        if (path === '/health') {
+          return new Response(healthPage(report), {
+            status,
+            headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache' },
+          });
+        }
+        return Response.json(report, { status });
       }
 
       if (method === 'GET' && path === '/api/events') {

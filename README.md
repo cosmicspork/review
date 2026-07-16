@@ -136,6 +136,10 @@ This re-snapshots the parts, flips the review back to `pending`, **keeps the exi
 | `POST` | `/api/reviews/:id/revise` | `{parts?, meta?, note?}` — re-snapshot, back to pending. |
 | `DELETE` | `/api/reviews/:id` | Delete + cascade. |
 | `POST` | `/api/cleanup` | `{olderThanDays, status?}` — prune resolved reviews. |
+| `GET` | `/api/health` | `{ok, service, version, uptime_s, reviews:{total,pending}}` JSON (200, or 503 if the DB is unqueryable). |
+| `GET` | `/health` | The same check as an HTML status page for humans (`open localhost:4000/health`). |
+
+An agent can confirm the server is up before submitting with `curl -fsS localhost:4000/api/health`; both routes query SQLite, so a 200 attests the store is readable, not merely that the port is open.
 
 ## Cleanup
 
