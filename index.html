@@ -80,12 +80,12 @@
   .filters button:hover{border-color:var(--muted); color:var(--ink)}
   .filters button[aria-pressed="true"]{background:var(--accent-fill); color:var(--accent-fill-ink); border-color:var(--accent-fill); font-weight:700}
 
-  .queue{flex:1; overflow-y:auto; padding:14px 16px 30px; display:flex; flex-direction:column; gap:11px}
+  .queue{flex:1; min-height:0; overflow-y:auto; padding:14px 16px 30px; display:flex; flex-direction:column; gap:11px}
   .queue::-webkit-scrollbar,.detail::-webkit-scrollbar{width:10px}
   .queue::-webkit-scrollbar-thumb,.detail::-webkit-scrollbar-thumb{background:var(--surface-3); border-radius:8px; border:3px solid transparent; background-clip:content-box}
 
   .card{
-    position:relative; text-align:left; width:100%; cursor:pointer;
+    position:relative; text-align:left; width:100%; cursor:pointer; flex:none;
     background:var(--surface); border:1px solid var(--hair-strong); border-radius:10px;
     padding:14px 15px 13px 18px; transition:.16s; overflow:hidden; color:inherit; font:inherit;
     opacity:0; transform:translateY(10px); animation:rise .5s cubic-bezier(.2,.7,.2,1) forwards;
