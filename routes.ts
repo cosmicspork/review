@@ -69,6 +69,19 @@ async function buildPartRows(
       } else {
         throw new HttpError(400, 'diff part needs a `diff` spec or a `patch` string');
       }
+      if (!content.trim()) {
+        if (typeof part.patch === 'string') {
+          throw new HttpError(422, 'diff patch is empty; provide a non-empty patch');
+        }
+        const mode = (part.diff as DiffSpec).mode;
+        if (mode === 'staged') {
+          throw new HttpError(422, 'staged diff is empty; stage changes or use worktree/range mode');
+        }
+        if (mode === 'range') {
+          throw new HttpError(422, 'range diff is empty; choose refs with changes between them');
+        }
+        throw new HttpError(422, 'worktree diff is empty; make uncommitted changes or use staged/range mode');
+      }
       rows.push({ id, review_id: reviewId, seq, type: 'diff', label, content, raw: null });
     } else if (part.type === 'markdown') {
       if (typeof part.content !== 'string') throw new HttpError(400, 'markdown part needs `content`');
