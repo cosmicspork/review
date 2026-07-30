@@ -73,6 +73,8 @@ The `id` from the response is also a **deep link**: `http://localhost:4000/revie
 
 `worktree` mode includes **untracked files** as full add-patches, so brand-new docs and files show up in the diff.
 
+Every diff part must contain at least one change. An empty capture is rejected with `422` and mode-specific guidance: make uncommitted changes for `worktree`, stage changes for `staged`, or select refs with changes for `range`.
+
 ### Example: a GitLab merge request
 
 ```sh

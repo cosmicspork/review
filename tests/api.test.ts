@@ -1,12 +1,15 @@
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { test, expect } from 'bun:test';
 import { createDb } from '../db.ts';
 import { createHandler, type Handler } from '../routes.ts';
 
-function makeHandler(): Handler {
+function makeHandler(repoRoot = '/tmp'): Handler {
   const db = createDb(':memory:');
   return createHandler({
     db,
-    repoRoot: '/tmp',
+    repoRoot,
     indexHtml: '<html></html>',
     bundle: { js: null, err: null },
     diff2htmlCssPath: '/dev/null',
@@ -87,6 +90,37 @@ test('a diff part with a git spec but unresolvable repo is rejected', async () =
     parts: [{ type: 'diff', diff: { mode: 'worktree' } }],
   });
   expect(res.status).toBe(400);
+});
+
+test('an empty diff is rejected with an actionable correction', async () => {
+  const h = makeHandler();
+  const res = await post(h, '/api/reviews', {
+    title: 't',
+    kind: 'code',
+    parts: [{ type: 'diff', patch: '' }],
+  });
+  expect(res.status).toBe(422);
+  expect(await res.text()).toBe('diff patch is empty; provide a non-empty patch');
+});
+
+test('an empty worktree capture is rejected with mode-specific guidance', async () => {
+  const repo = mkdtempSync(join(tmpdir(), 'rev-api-'));
+  try {
+    const init = Bun.spawn(['git', '-C', repo, 'init'], { stdout: 'ignore', stderr: 'ignore' });
+    expect(await init.exited).toBe(0);
+
+    const h = makeHandler(repo);
+    const res = await post(h, '/api/reviews', {
+      repo,
+      title: 't',
+      kind: 'code',
+      parts: [{ type: 'diff', diff: { mode: 'worktree' } }],
+    });
+    expect(res.status).toBe(422);
+    expect(await res.text()).toBe('worktree diff is empty; make uncommitted changes or use staged/range mode');
+  } finally {
+    rmSync(repo, { recursive: true, force: true });
+  }
 });
 
 test('?wait long-poll resolves when a PATCH lands mid-wait', async () => {
