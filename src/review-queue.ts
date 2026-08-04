@@ -1,4 +1,4 @@
-import { LitElement, html } from 'lit';
+import { LitElement, html, nothing } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
 import type { ReviewSummary } from '../db.ts';
 import { KIND_ICON, STATUS_LABEL, ago, kindLabel, railColor } from './util.ts';
@@ -8,6 +8,7 @@ export class ReviewQueue extends LitElement {
   @property({ attribute: false }) reviews: ReviewSummary[] = [];
   @property() activeId: string | null = null;
   @property() filter: 'all' | 'pending' | 'resolved' = 'all';
+  @property({ attribute: false }) unseen = new Set<string>();
 
   createRenderRoot() {
     return this;
@@ -33,7 +34,12 @@ export class ReviewQueue extends LitElement {
         >
           <div class="card-top">
             <span class="kind"><span class="ico">${KIND_ICON[r.kind] ?? '•'}</span>${kindLabel(r.kind)}</span>
-            <span class="pill ${r.status}">${STATUS_LABEL[r.status]}</span>
+            <span class="pill-row">
+              ${this.unseen.has(r.id)
+                ? html`<span class="dot-new" role="status" aria-label="Needs your attention"></span>`
+                : nothing}
+              <span class="pill ${r.status}">${STATUS_LABEL[r.status]}</span>
+            </span>
           </div>
           <h3>${r.title}</h3>
           <div class="card-meta">
