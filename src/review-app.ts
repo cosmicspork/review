@@ -2,6 +2,17 @@ import { LitElement, html, nothing } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import type { FullReview, ReviewStatus, ReviewSummary } from '../db.ts';
 import * as api from './api.ts';
+import {
+  type Notice,
+  applyBadge,
+  diffNotices,
+  noticeLabel,
+  notifyPref,
+  notifySupported,
+  requestNotifyPermission,
+  setNotifyPref,
+  showNotice,
+} from './notify.ts';
 import './review-queue.ts';
 import './review-detail.ts';
 
@@ -38,10 +49,15 @@ export class ReviewApp extends LitElement {
   @state() private toastMsg = '';
   @state() private toastShow = false;
   @state() private settingsOpen = false;
+  @state() private notifyOn = false;
+  @state() private unseen = new Set<string>();
 
   private readonly theme = window.__reviewTheme!;
   private readonly timers = new Map<string, ReturnType<typeof setTimeout>>();
   private toastTimer?: ReturnType<typeof setTimeout>;
+  private toastAction?: () => void;
+  private prevList: ReviewSummary[] | null = null;
+  private listChain: Promise<void> = Promise.resolve();
   private es?: EventSource;
 
   createRenderRoot() {
@@ -62,8 +78,10 @@ export class ReviewApp extends LitElement {
       this.themeId = fallback;
     }
     this.applyMode();
+    this.notifyOn = notifySupported() && notifyPref() && Notification.permission === 'granted';
     this.theme.mql.addEventListener('change', this.onMql);
     window.addEventListener('popstate', this.onPopState);
+    window.addEventListener('focus', this.onWindowFocus);
     this.activeId = ReviewApp.idFromPath();
     void this.boot();
     this.connectSse();
@@ -73,6 +91,7 @@ export class ReviewApp extends LitElement {
     super.disconnectedCallback();
     this.theme.mql.removeEventListener('change', this.onMql);
     window.removeEventListener('popstate', this.onPopState);
+    window.removeEventListener('focus', this.onWindowFocus);
     this.es?.close();
   }
 
@@ -110,6 +129,18 @@ export class ReviewApp extends LitElement {
     }
   }
 
+  // Coming back to the tab counts as reading whatever is already open.
+  private onWindowFocus = (): void => {
+    if (this.activeId) this.markSeen(this.activeId);
+  };
+
+  private markSeen(id: string): void {
+    if (!this.unseen.has(id)) return;
+    const next = new Set(this.unseen);
+    next.delete(id);
+    this.unseen = next;
+  }
+
   private onMql = (): void => {
     if (this.mode === 'auto') this.applyMode();
   };
@@ -139,6 +170,9 @@ export class ReviewApp extends LitElement {
 
   private connectSse(): void {
     this.es = new EventSource('/api/events');
+    // EventSource reconnects on its own but replays nothing, so resync on every open —
+    // that is what keeps the notice diff honest across a server restart.
+    this.es.onopen = () => void this.fetchList();
     this.es.onmessage = (e) => {
       try {
         this.onSse(JSON.parse(e.data) as { kind: string; id: string });
@@ -159,12 +193,40 @@ export class ReviewApp extends LitElement {
     }
   }
 
-  private async fetchList(): Promise<void> {
-    this.reviews = await api.listReviews();
+  // Serialized: an SSE message landing during the reconnect resync would otherwise
+  // diff against the same snapshot and announce the same arrival twice.
+  private fetchList(): Promise<void> {
+    this.listChain = this.listChain.then(() => this.loadList()).catch(() => {});
+    return this.listChain;
+  }
+
+  private async loadList(): Promise<void> {
+    const prev = this.prevList;
+    const next = await api.listReviews();
+    this.prevList = next;
+    this.reviews = next;
+    this.announce(diffNotices(prev, next));
+    applyBadge(next.filter((r) => r.status === 'pending').length);
     if (!this.activeId && this.reviews.length) {
       this.activeId = this.reviews[0].id;
       this.syncUrl(this.activeId, true);
       void this.fetchActive();
+    }
+  }
+
+  private announce(notices: Notice[]): void {
+    if (!notices.length) return;
+    const unseen = new Set(this.unseen);
+    for (const n of notices) {
+      unseen.add(n.id);
+      showNotice(n, (id) => this.select(id));
+    }
+    this.unseen = unseen;
+    if (notices.length === 1) {
+      const [n] = notices;
+      this.toast(`${noticeLabel(n.kind)} · ${n.title}`, () => this.select(n.id));
+    } else {
+      this.toast(`${notices.length} reviews need your attention`);
     }
   }
 
@@ -173,19 +235,45 @@ export class ReviewApp extends LitElement {
   }
 
   private select(id: string): void {
+    this.markSeen(id);
     if (id === this.activeId) return;
     this.activeId = id;
     this.syncUrl(id);
     void this.fetchActive();
   }
 
-  private toast(msg: string): void {
+  private toast(msg: string, action?: () => void): void {
     this.toastMsg = msg;
+    this.toastAction = action;
     this.toastShow = true;
     clearTimeout(this.toastTimer);
     this.toastTimer = setTimeout(() => {
       this.toastShow = false;
+      this.toastAction = undefined;
     }, 2400);
+  }
+
+  private onToastClick = (): void => {
+    if (!this.toastAction) return;
+    this.toastAction();
+    this.toastShow = false;
+  };
+
+  private async setNotify(on: boolean): Promise<void> {
+    if (!on) {
+      this.notifyOn = false;
+      setNotifyPref(false);
+      return;
+    }
+    if ((await requestNotifyPermission()) !== 'granted') {
+      this.notifyOn = false;
+      setNotifyPref(false);
+      this.toast('Notifications are blocked in browser settings');
+      return;
+    }
+    this.notifyOn = true;
+    setNotifyPref(true);
+    this.toast('Notifications on');
   }
 
   private debounce(key: string, fn: () => void, immediate: boolean): void {
@@ -257,6 +345,7 @@ export class ReviewApp extends LitElement {
               .reviews=${this.reviews}
               .activeId=${this.activeId}
               .filter=${this.filter}
+              .unseen=${this.unseen}
               @select=${(e: CustomEvent) => this.select(e.detail.id)}
             ></review-queue>
           </div>
@@ -294,6 +383,15 @@ export class ReviewApp extends LitElement {
                   )}
                 </div>
               </div>
+              ${notifySupported()
+                ? html`<div class="foot-row">
+                    <span class="foot-label">Notify</span>
+                    <div class="seg">
+                      <button aria-pressed=${!this.notifyOn} @click=${() => void this.setNotify(false)}>Off</button>
+                      <button aria-pressed=${this.notifyOn} @click=${() => void this.setNotify(true)}>On</button>
+                    </div>
+                  </div>`
+                : nothing}
             </div>
           </div>
         </aside>
@@ -308,7 +406,12 @@ export class ReviewApp extends LitElement {
             ></review-detail>`
           : html`<main class="detail"><div class="empty">select a review</div></main>`}
       </div>
-      <div class="toast ${this.toastShow ? 'show' : ''}">${this.toastMsg}</div>
+      <div
+        class="toast ${this.toastShow ? 'show' : ''} ${this.toastAction ? 'action' : ''}"
+        @click=${this.onToastClick}
+      >
+        ${this.toastMsg}
+      </div>
     `;
   }
 }

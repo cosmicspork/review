@@ -5,7 +5,7 @@ A small, local **pre-publish review queue**. Coding agents submit artifacts — 
 `review` never talks to GitLab/GitHub/Jira and holds no tokens. It is a review gate, not a publisher.
 
 - **Agent interface:** a small JSON HTTP API.
-- **Human interface:** a single-page app (editorial dark/light theme, multi-theme, diff viewer, inline markdown editing, comments).
+- **Human interface:** a single-page app (editorial dark/light theme, multi-theme, diff viewer, inline markdown editing, comments, desktop notifications).
 - **Storage:** one SQLite file. The queue is lock-free — diffs are snapshotted from `git` at submit time, so an agent can submit and keep working.
 
 ## Quick start
@@ -151,6 +151,17 @@ Resolved reviews pile up; prune the old ones:
 bun run cleanup.ts --days=30                 # delete reviews resolved >30 days ago
 bun run cleanup.ts --days=0 --status=approved # purge all approved
 ```
+
+## Notifications
+
+An agent blocked on `bin/review-wait` waits exactly as long as it takes someone to notice the tab, so the queue announces the two moments that need a human:
+
+- **New review** — something was just submitted.
+- **Ready for re-review** — an agent called `revise` and a review you had sent back is pending again.
+
+Each one badges the tab title and favicon with the pending count, marks the queue card with a dot until you open it, and shows a toast you can click to jump straight to the review. Turn **Notify** on in the sidebar's settings tray to also get a desktop notification — the browser asks for permission once, the choice persists, and clicking a notification focuses the tab on that review. Desktop notifications are skipped while you already have the tab open and focused, since the toast and badge cover that case.
+
+Nothing you do yourself notifies you — only an agent can put a review into `pending`. Notifications need the app open in a browser tab; `review` has no background process and sends nothing anywhere.
 
 ## Theming
 
