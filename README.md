@@ -40,7 +40,7 @@ The `id` from the response is also a **deep link**: `http://localhost:4000/revie
 | `REVIEW_PORT` | `4000` | HTTP port |
 | `REVIEW_HOST` | `127.0.0.1` | bind address — loopback only by default; the queue holds unpublished diffs and the API can run `git` against repos under `REVIEW_REPO_ROOT` |
 | `REVIEW_DB` | `~/.review/review.sqlite` | SQLite path (parent dir auto-created) |
-| `REVIEW_REPO_ROOT` | `~/src` | repos must resolve under this root to be diffed |
+| `REVIEW_REPO_ROOT` | `~/src` | normal repos must resolve beneath this root; linked worktrees registered by those repos may live elsewhere, including `/private/tmp` |
 | `REVIEW_THEME` | `~/.review/theme.json` | optional theme override merged over the built-ins |
 
 ## Submitting reviews (the agent contract)
@@ -48,7 +48,7 @@ The `id` from the response is also a **deep link**: `http://localhost:4000/revie
 `POST /api/reviews` with `{ repo?, title, kind, meta?, parts: [...] }`:
 
 - **`kind`** — `code` · `mr` (GitLab merge request) · `pr` (GitHub pull request) · `ticket` (e.g. Jira). It only drives the label/icon; the parts carry the content.
-- **`repo`** — absolute path. Required when any part captures a diff from git (see below); it must resolve under `REVIEW_REPO_ROOT` and contain a `.git`. Optional otherwise.
+- **`repo`** — absolute path. Required when any part captures a diff from git (see below). A normal repository must resolve beneath `REVIEW_REPO_ROOT` and contain a `.git`; a linked worktree registered by a repository beneath that root may reside elsewhere, including `/private/tmp`. Arbitrary standalone repositories outside the root remain rejected; no additional configuration is required. Optional otherwise.
 - **`meta`** — free-form JSON shown as chips: `provider`, `branch`, `sourceBranch`, `targetBranch`, `project`, `issueType`, `key`, …
 - **`parts`** — an ordered list. Each is one of:
 

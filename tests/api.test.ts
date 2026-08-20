@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect } from 'bun:test';
@@ -22,6 +22,11 @@ const post = (h: Handler, p: string, b: unknown) =>
 const patch = (h: Handler, p: string, b: unknown) =>
   h(new Request('http://x' + p, { method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify(b) }));
 const get = (h: Handler, p: string) => h(new Request('http://x' + p));
+
+async function git(cwd: string, ...args: string[]): Promise<void> {
+  const process = Bun.spawn(['git', '-C', cwd, ...args], { stdout: 'ignore', stderr: 'ignore' });
+  expect(await process.exited).toBe(0);
+}
 
 test('GET /api/health returns ok JSON with review counts', async () => {
   const h = makeHandler();
@@ -120,6 +125,43 @@ test('an empty worktree capture is rejected with mode-specific guidance', async 
     expect(await res.text()).toBe('worktree diff is empty; make uncommitted changes or use staged/range mode');
   } finally {
     rmSync(repo, { recursive: true, force: true });
+  }
+});
+
+test('POST captures a diff from a linked worktree outside the trusted root', async () => {
+  const trustedRoot = mkdtempSync(join(tmpdir(), 'rev-api-root-'));
+  const primary = join(trustedRoot, 'primary');
+  const externalRoot = mkdtempSync(join(tmpdir(), 'rev-api-external-'));
+  const linkedWorktree = join(externalRoot, 'linked');
+  mkdirSync(primary);
+
+  try {
+    await git(primary, 'init');
+    await git(primary, 'config', 'user.email', 't@t');
+    await git(primary, 'config', 'user.name', 't');
+    writeFileSync(join(primary, 'tracked.txt'), 'before\n');
+    await git(primary, 'add', 'tracked.txt');
+    await git(primary, 'commit', '-m', 'init');
+    await git(primary, 'worktree', 'add', '--detach', linkedWorktree, 'HEAD');
+    writeFileSync(join(linkedWorktree, 'tracked.txt'), 'after\n');
+
+    const h = makeHandler(trustedRoot);
+    const created = await post(h, '/api/reviews', {
+      repo: linkedWorktree,
+      title: 'linked worktree',
+      kind: 'code',
+      parts: [{ type: 'diff', diff: { mode: 'worktree' } }],
+    });
+    expect(created.status).toBe(201);
+
+    const { id } = await created.json();
+    const review = await (await get(h, '/api/reviews/' + id)).json();
+    expect(review.parts[0].content).toContain('-before');
+    expect(review.parts[0].content).toContain('+after');
+  } finally {
+    if (existsSync(linkedWorktree)) await git(primary, 'worktree', 'remove', '--force', linkedWorktree);
+    rmSync(externalRoot, { recursive: true, force: true });
+    rmSync(trustedRoot, { recursive: true, force: true });
   }
 });
 

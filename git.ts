@@ -1,5 +1,5 @@
-import { isAbsolute, join, sep } from 'node:path';
-import { realpathSync, existsSync } from 'node:fs';
+import { basename, dirname, isAbsolute, join, sep } from 'node:path';
+import { existsSync, lstatSync, readFileSync, realpathSync } from 'node:fs';
 
 export class HttpError extends Error {
   constructor(
@@ -29,6 +29,76 @@ async function run(args: string[]): Promise<{ stdout: string; code: number }> {
   return { stdout, code };
 }
 
+function isPathWithin(path: string, root: string): boolean {
+  return path === root || path.startsWith(root + sep);
+}
+
+function resolveGitdirPointer(file: string): string | null {
+  let gitdir: string;
+  try {
+    const stat = lstatSync(file);
+    if (!stat.isFile() || stat.isSymbolicLink()) return null;
+
+    const match = /^gitdir: ([^\r\n]+)\r?\n?$/.exec(readFileSync(file, 'utf8'));
+    if (!match) return null;
+    gitdir = match[1];
+  } catch {
+    return null;
+  }
+
+  return isAbsolute(gitdir) ? gitdir : join(dirname(file), gitdir);
+}
+
+function resolveGitdirBacklink(file: string): string | null {
+  let gitdir: string;
+  try {
+    const stat = lstatSync(file);
+    if (!stat.isFile() || stat.isSymbolicLink()) return null;
+
+    const match = /^([^\r\n]+)\r?\n?$/.exec(readFileSync(file, 'utf8'));
+    if (!match) return null;
+    gitdir = match[1];
+  } catch {
+    return null;
+  }
+
+  return isAbsolute(gitdir) ? gitdir : join(dirname(file), gitdir);
+}
+
+function isLinkedWorktreeOfRoot(repo: string, root: string): boolean {
+  const gitFile = join(repo, '.git');
+  const gitdir = resolveGitdirPointer(gitFile);
+  if (!gitdir) return false;
+
+  let realGitdir: string;
+  let realGitFile: string;
+  try {
+    const gitdirStat = lstatSync(gitdir);
+    if (!gitdirStat.isDirectory() || gitdirStat.isSymbolicLink()) return false;
+    realGitdir = realpathSync(gitdir);
+    realGitFile = realpathSync(gitFile);
+  } catch {
+    return false;
+  }
+
+  if (
+    !isPathWithin(realGitdir, root) ||
+    basename(dirname(realGitdir)) !== 'worktrees' ||
+    !isPathWithin(dirname(dirname(realGitdir)), root)
+  ) {
+    return false;
+  }
+
+  const backlink = resolveGitdirBacklink(join(realGitdir, 'gitdir'));
+  if (!backlink) return false;
+
+  try {
+    return realpathSync(backlink) === realGitFile;
+  } catch {
+    return false;
+  }
+}
+
 export function resolveRepo(repo: string, root: string): string {
   if (!repo || !isAbsolute(repo)) throw new HttpError(400, 'repo must be an absolute path');
   let real: string;
@@ -39,8 +109,11 @@ export function resolveRepo(repo: string, root: string): string {
   } catch {
     throw new HttpError(400, 'repo path does not exist');
   }
-  if (real !== realRoot && !real.startsWith(realRoot + sep)) {
-    throw new HttpError(400, 'repo is outside REVIEW_REPO_ROOT');
+  if (!isPathWithin(real, realRoot)) {
+    if (!isLinkedWorktreeOfRoot(real, realRoot)) {
+      throw new HttpError(400, 'repo is outside REVIEW_REPO_ROOT and is not a linked worktree of a repository within it');
+    }
+    return real;
   }
   if (!existsSync(join(real, '.git'))) throw new HttpError(400, 'repo is not a git repository');
   return real;
