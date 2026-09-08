@@ -152,6 +152,18 @@ function escapeHtml(s: string): string {
   return s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 }
 
+// The submit/revise responses are the one place an agent is guaranteed to look,
+// so they carry the deep link and the wait command rather than just the id.
+// Harness note: `wait` must not be run as a plain foreground call — Claude Code
+// kills it at its Bash timeout, and omp auto-backgrounds it at 60s and hands the
+// turn back with the review still pending.
+function agentNext(origin: string, id: string): { url: string; wait: string } {
+  return {
+    url: `${origin}/reviews/${id}`,
+    wait: `review-wait ${id} --timeout=1800`,
+  };
+}
+
 export function createHandler(deps: HandlerDeps): Handler {
   const { db, repoRoot, indexHtml, bundle, diff2htmlCssPath } = deps;
   const startedAt = Date.now();
@@ -273,7 +285,7 @@ export function createHandler(deps: HandlerDeps): Handler {
           for (const r of rows) db.insertPart(r);
         });
         broadcast({ kind: 'add', id });
-        return Response.json({ id }, { status: 201 });
+        return Response.json({ id, ...agentNext(url.origin, id) }, { status: 201 });
       }
 
       const idMatch = path.match(/^\/api\/reviews\/([^/]+)(\/status|\/comments|\/revise)?$/);
@@ -382,7 +394,7 @@ export function createHandler(deps: HandlerDeps): Handler {
           }
           notifyStatus(id, 'pending');
           broadcast({ kind: 'update', id });
-          return Response.json({ status: 'pending' });
+          return Response.json({ status: 'pending', ...agentNext(url.origin, id) });
         }
       }
 

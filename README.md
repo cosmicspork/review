@@ -26,7 +26,7 @@ curl -s localhost:4000/api/reviews -H 'content-type: application/json' -d '{
   "kind": "code",
   "parts": [{ "type": "diff", "label": "Code changes", "diff": { "mode": "worktree" } }]
 }'
-# -> {"id":"…"}
+# -> {"id":"…","url":"http://localhost:4000/reviews/…","wait":"review-wait … --timeout=1800"}
 ```
 
 The card appears in the queue. Approve it in the UI, then have the agent read it back.
@@ -107,6 +107,35 @@ review/bin/review-wait <review-id>
 
 It long-polls and, on a terminal status, prints the status to **stderr** and the full review JSON to **stdout**, then exits 0.
 
+### Waiting from inside an agent harness
+
+Please do not run `review-wait` as a plain foreground command. Every harness has some
+ceiling on how long one tool call may block, and a human verdict routinely takes longer
+than any of them. The two failure modes look different and neither is an error you will
+notice:
+
+- **Claude Code** caps a Bash call at 120s by default and 600s hard, so a foreground wait
+  is killed with the review still pending. Run it as a **background** command instead: the
+  process exits on a terminal status, and that exit re-invokes the agent with the result.
+- **omp** has no timeout ceiling, but `bash.autoBackground` hands the turn back at 60s with
+  `Backgrounded as job …; result will be delivered automatically.` The agent is then free,
+  goes idle, and asks its human instead of waiting. Register the wait as an async job and
+  `hub` wait on it rather than relying on the foreground call.
+
+In both cases pass a bounded `--timeout` (1800 is a reasonable default) so a review nobody
+resolves does not leave a job pending for the life of the session.
+
+The submit and revise responses hand you the exact command to run, so there is nothing to
+construct by hand:
+
+```jsonc
+{ "id": "…", "url": "http://localhost:4000/reviews/…", "wait": "review-wait … --timeout=1800" }
+```
+
+Whatever the harness, please block until the verdict actually lands. Ending the turn and
+asking a human to paste the outcome defeats the point of the queue: they already have the
+review open in front of them.
+
 **Or poll directly:** `GET /api/reviews/:id/status?wait=45` holds the connection until the status changes (or ~45 s elapse) and returns the current status as plain text.
 
 Once terminal, fetch `GET /api/reviews/:id` and read each part's **`edited ?? content`** — that is the human-approved text. For `adf` parts the original ADF is in `raw`, so you can re-derive ADF from the edited markdown or post `raw` unchanged. Comments are in `comments[]`. Then publish however you normally would.
@@ -128,16 +157,17 @@ This re-snapshots the parts, flips the review back to `pending`, **keeps the exi
 
 | Method | Path | Notes |
 |---|---|---|
-| `POST` | `/api/reviews` | Submit; returns `{id}` (201). |
+| `POST` | `/api/reviews` | Submit; returns `{id, url, wait}` (201). |
 | `GET` | `/api/reviews` | Queue summaries, pending first. |
 | `GET` | `/api/reviews/:id` | Full review + parts + comments. |
 | `GET` | `/api/reviews/:id/status?wait=N` | Status as text; long-polls up to N (≤50) seconds. |
 | `PATCH` | `/api/reviews/:id` | `{status?, title?, meta?}`. |
 | `PUT` | `/api/parts/:id` | `{edited}` — human edit (markdown/adf parts only). |
 | `POST` | `/api/reviews/:id/comments` | `{part_id?, anchor?, body, author?}`. |
-| `POST` | `/api/reviews/:id/revise` | `{parts?, meta?, note?}` — re-snapshot, back to pending. |
+| `POST` | `/api/reviews/:id/revise` | `{parts?, meta?, note?}` — re-snapshot, back to pending; returns `{status, url, wait}`. |
 | `DELETE` | `/api/reviews/:id` | Delete + cascade. |
 | `POST` | `/api/cleanup` | `{olderThanDays, status?}` — prune resolved reviews. |
+| `GET` | `/api/events` | SSE stream of `add`/`update` events for every review. Powers the SPA; a monitor-style agent can subscribe instead of polling one id. |
 | `GET` | `/api/health` | `{ok, service, version, uptime_s, reviews:{total,pending}}` JSON (200, or 503 if the DB is unqueryable). |
 | `GET` | `/health` | The same check as an HTML status page for humans (`open localhost:4000/health`). |
 
